@@ -96,7 +96,8 @@ def user_email(user, *args):
 #     return False
 
 
-def perform_login(request, user, email_verification, redirect_url=None):
+def perform_login(request, user, email_verification, 
+                  redirect_url=None, signal_kwargs={}):
     from .models import EmailAddress
 
     # not is_active: social users are redirected to a template
@@ -117,10 +118,13 @@ def perform_login(request, user, email_verification, redirect_url=None):
         user.backend = "django.contrib.auth.backends.ModelBackend"
     signals.user_logged_in.send(sender=user.__class__, 
                                 request=request, 
-                                user=user)
+                                user=user,
+                                **signal_kwargs)
     login(request, user)
-    messages.add_message(request, messages.SUCCESS,
-                         ugettext("Successfully signed in as %(user)s.") % { "user": user_display(user) } )
+    get_adapter().add_message(request, 
+                              messages.SUCCESS,
+                              'account/messages/logged_in.txt',
+                              { 'user': user })
 
     return HttpResponseRedirect(get_login_redirect_url(request, redirect_url))
 
@@ -132,7 +136,8 @@ def complete_signup(request, user, email_verification, success_url, signal_kwarg
                                 **signal_kwargs)
     return perform_login(request, user, 
                          email_verification=email_verification,
-                         redirect_url=success_url)
+                         redirect_url=success_url,
+                         signal_kwargs=signal_kwargs)
 
 
 def cleanup_email_addresses(request, addresses):

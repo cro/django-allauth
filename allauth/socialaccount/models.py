@@ -1,9 +1,9 @@
-import json
-
+from django.core.exceptions import PermissionDenied
 from django.db import models
 from django.contrib.auth import authenticate
 from django.contrib.sites.models import Site
 from django.utils.encoding import python_2_unicode_compatible
+from django.utils.crypto import get_random_string
 try:
     from django.utils.encoding import force_text
 except ImportError:
@@ -128,9 +128,8 @@ class SocialLogin(object):
 
     `state` (`dict`): The state to be preserved during the
     authentication handshake. Note that this state may end up in the
-    url (e.g. OAuth2 `state` parameter) -- do not put any secrets in
-    there. It currently only contains the url to redirect to after
-    login.
+    url -- do not put any secrets in here. It currently only contains
+    the url to redirect to after login.
 
     `email_addresses` (list of `EmailAddress`): Optional list of
     e-mail addresses retrieved from the provider.
@@ -212,22 +211,27 @@ class SocialLogin(object):
     @classmethod
     def state_from_request(cls, request):
         state = {}
-        next = get_next_redirect_url(request)
-        if next:
-            state['next'] = next
+        next_url = get_next_redirect_url(request)
+        if next_url:
+            state['next'] = next_url
         return state
 
     @classmethod
-    def marshall_state(cls, request):
+    def stash_state(cls, request):
         state = cls.state_from_request(request)
-        return json.dumps(state)
+        verifier = get_random_string()
+        request.session['socialaccount_state'] = (state, verifier)
+        return verifier
     
     @classmethod
-    def unmarshall_state(cls, state_string):
-        if state_string:
-            state = json.loads(state_string)
-        else:
-            state = {}
+    def unstash_state(cls, request):
+        state, verifier = request.session.pop('socialaccount_state')
         return state
-    
-            
+
+    @classmethod
+    def verify_and_unstash_state(cls, request, verifier):
+        state, verifier2 = request.session.pop('socialaccount_state')
+        if verifier != verifier2:
+            raise PermissionDenied()
+        return state
+

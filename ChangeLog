@@ -1,3 +1,40 @@
+2013-06-04  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Version 0.11.1 released (due to issue in disconnecting social
+	accounts).
+
+2013-06-02  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Version 0.11.0 released.
+
+2013-05-30  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Moved logic whether or not a social account can be disconnected
+	to the `SocialAccountAdapter` (`validate_disconnect`).
+
+	* Added `social_account_removed` signal.
+
+2013-05-29  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Implemented CSRF protection
+	(http://tools.ietf.org/html/draft-ietf-oauth-v2-30#section-10.12).
+
+	* The `user_logged_in` signal now optionally receives a
+	`sociallogin` parameter, in case of a social login.
+
+	* Added `social_account_added` (contributed by orblivion, thanks).
+
+	* Hatem Nassrat contributed Bitly support, thanks!
+
+2013-05-22  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Bojan Mihelac contributed a Croatian translation, thanks!
+
+2013-05-20  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Messages (as in `django.contrib.messages`) are now configurable
+	through templates.
+
 2013-04-25  Raymond Penners  <raymond.penners@intenct.nl>
 
 	* Added support for differentiating e-mail handling (verification,

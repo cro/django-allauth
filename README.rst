@@ -68,6 +68,8 @@ Supported Flows
 Supported Providers
 -------------------
 
+- Bitly (OAuth2)
+
 - Dropbox (OAuth)
 
 - Facebook (both OAuth2 and JS SDK)
@@ -157,10 +159,11 @@ settings.py::
         'allauth.account',
         'allauth.socialaccount',
 	# ... include the providers you want to enable:
+        'allauth.socialaccount.providers.bitly',
         'allauth.socialaccount.providers.dropbox',
         'allauth.socialaccount.providers.facebook',
-        'allauth.socialaccount.providers.google',
         'allauth.socialaccount.providers.github',
+        'allauth.socialaccount.providers.google',
         'allauth.socialaccount.providers.linkedin',
         'allauth.socialaccount.providers.openid',
         'allauth.socialaccount.providers.persona',
@@ -713,6 +716,15 @@ The following signals are emitted:
   tokens and profile information, if applicable for the provider, is
   provided.
 
+- `allauth.socialaccount.signals.social_account_added`
+
+  Sent after a user connects a social account to a his local account.
+
+- `allauth.socialaccount.signals.social_account_removed`
+
+  Sent after a user disconnects a social account from his local
+  account.
+
 
 Views
 =====
@@ -725,7 +737,7 @@ confirmation before logging out. The user is logged out only when the
 confirmation is received by means of a POST request.
 
 If you are wondering why, consider what happens when a malicious user
-embeds the following image in a POST::
+embeds the following image in a post::
 
     <img src="http://example.com/accounts/logout/">
 
@@ -922,7 +934,12 @@ follows::
             path = "/accounts/{username}/"
             return path.format(username=request.user.username)
 
+Messages
+--------
 
+All messages (as in `django.contrib.messages`) are configurable by
+overriding their respective template. If you want to disable a message
+simply override the message template with a blank one.
 
 
 Showcase
