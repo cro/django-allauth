@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+
+import json
+
 from django.core.exceptions import PermissionDenied
 from django.db import models
 from django.contrib.auth import authenticate
@@ -10,7 +14,10 @@ except ImportError:
     from django.utils.encoding import force_unicode as force_text
 
 import allauth.app_settings
+from allauth.account.models import EmailAddress
 from allauth.account.utils import get_next_redirect_url, setup_user_email
+from allauth.utils import (get_user_model, serialize_instance,
+                           deserialize_instance)
 
 from . import providers
 from .fields import JSONField
@@ -22,11 +29,12 @@ class SocialAppManager(models.Manager):
         return self.get(sites__id=site.id,
                         provider=provider)
 
+
 @python_2_unicode_compatible
 class SocialApp(models.Model):
     objects = SocialAppManager()
 
-    provider = models.CharField(max_length=30, 
+    provider = models.CharField(max_length=30,
                                 choices=providers.registry.as_choices())
     name = models.CharField(max_length=40)
     client_id = models.CharField(max_length=100,
@@ -45,6 +53,7 @@ class SocialApp(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class SocialAccount(models.Model):
     user = models.ForeignKey(allauth.app_settings.USER_MODEL)
@@ -96,10 +105,13 @@ class SocialAccount(models.Model):
 class SocialToken(models.Model):
     app = models.ForeignKey(SocialApp)
     account = models.ForeignKey(SocialAccount)
-    token = models.TextField(
-                             help_text='"oauth_token" (OAuth1) or access token (OAuth2)')
-    token_secret = models.CharField(max_length=200, blank=True,
-                                    help_text='"oauth_token_secret" (OAuth1) or refresh token (OAuth2)')
+    token = models \
+        .TextField(help_text='"oauth_token" (OAuth1) or access token (OAuth2)')
+    token_secret = models \
+        .CharField(max_length=200,
+                   blank=True,
+                   help_text='"oauth_token_secret" (OAuth1) or refresh'
+                   ' token (OAuth2)')
     expires_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
@@ -135,7 +147,7 @@ class SocialLogin(object):
     e-mail addresses retrieved from the provider.
     """
 
-    def __init__(self, account, token=None, email_addresses=[]):
+    def __init__(self, account=None, token=None, email_addresses=[]):
         if token:
             assert token.account is None or token.account == account
             token.account = account
@@ -147,6 +159,37 @@ class SocialLogin(object):
     def connect(self, request, user):
         self.account.user = user
         self.save(request, connect=True)
+
+    def serialize(self):
+        ret = dict(account=serialize_instance(self.account),
+                   user=serialize_instance(self.account.user),
+                   state=self.state,
+                   email_addresses=[serialize_instance(ea)
+                                    for ea in self.email_addresses])
+        if self.token:
+            ret['token'] = serialize_instance(self.token)
+        return ret
+
+    @classmethod
+    def deserialize(cls, data):
+        account = deserialize_instance(SocialAccount, data['account'])
+        user = deserialize_instance(get_user_model(), data['user'])
+        account.user = user
+        if 'token' in data:
+            token = deserialize_instance(SocialToken, data['token'])
+        else:
+            token = None
+        email_addresses = []
+        for ea in data['email_addresses']:
+            email_address = deserialize_instance(EmailAddress, ea)
+            email_addresses.append(email_address)
+        ret = SocialLogin()
+        ret.token = token
+        ret.account = account
+        ret.user = user
+        ret.email_addresses = email_addresses
+        ret.state = data['state']
+        return ret
 
     def save(self, request, connect=False):
         """
@@ -166,7 +209,6 @@ class SocialLogin(object):
             pass
         else:
             setup_user_email(request, user, self.email_addresses)
-           
 
     @property
     def is_existing(self):
@@ -181,7 +223,7 @@ class SocialLogin(object):
         """
         assert not self.is_existing
         try:
-            a = SocialAccount.objects.get(provider=self.account.provider, 
+            a = SocialAccount.objects.get(provider=self.account.provider,
                                           uid=self.account.uid)
             # Update account
             a.extra_data = self.account.extra_data
@@ -194,7 +236,10 @@ class SocialLogin(object):
                     t = SocialToken.objects.get(account=self.account,
                                                 app=self.token.app)
                     t.token = self.token.token
-                    t.token_secret = self.token.token_secret
+                    if self.token.token_secret:
+                        # only update the refresh token if we got one
+                        # many oauth2 providers do not resend the refresh token
+                        t.token_secret = self.token.token_secret
                     t.expires_at = self.token.expires_at
                     t.save()
                     self.token = t
@@ -203,17 +248,18 @@ class SocialLogin(object):
                     self.token.save()
         except SocialAccount.DoesNotExist:
             pass
-    
+
     def get_redirect_url(self, request):
         url = self.state.get('next')
         return url
-            
+
     @classmethod
     def state_from_request(cls, request):
         state = {}
         next_url = get_next_redirect_url(request)
         if next_url:
             state['next'] = next_url
+        state['process'] = request.REQUEST.get('process', 'login')
         return state
 
     @classmethod
@@ -222,16 +268,19 @@ class SocialLogin(object):
         verifier = get_random_string()
         request.session['socialaccount_state'] = (state, verifier)
         return verifier
-    
+
     @classmethod
     def unstash_state(cls, request):
+        if 'socialaccount_state' not in request.session:
+            raise PermissionDenied()
         state, verifier = request.session.pop('socialaccount_state')
         return state
 
     @classmethod
     def verify_and_unstash_state(cls, request, verifier):
+        if 'socialaccount_state' not in request.session:
+            raise PermissionDenied()
         state, verifier2 = request.session.pop('socialaccount_state')
         if verifier != verifier2:
             raise PermissionDenied()
         return state
-
