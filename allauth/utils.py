@@ -19,20 +19,27 @@ except ImportError:
 from . import app_settings
 
 
-def generate_unique_username(txt):
+def _generate_unique_username_base(txts):
+    username = None
+    for txt in txts:
+        username = unicodedata.normalize('NFKD', force_text(txt))
+        username = username.encode('ascii', 'ignore').decode('ascii')
+        username = force_text(re.sub('[^\w\s@+.-]', '', username).lower())
+        # Django allows for '@' in usernames in order to accomodate for
+        # project wanting to use e-mail for username. In allauth we don't
+        # use this, we already have a proper place for putting e-mail
+        # addresses (EmailAddress), so let's not use the full e-mail
+        # address and only take the part leading up to the '@'.
+        username = username.split('@')[0]
+        username = username.strip()
+        if username:
+            break
+    return username or 'user'
+
+
+def generate_unique_username(txts):
     from .account.app_settings import USER_MODEL_USERNAME_FIELD
-
-    username = unicodedata.normalize('NFKD', force_text(txt))
-    username = username.encode('ascii', 'ignore').decode('ascii')
-    username = force_text(re.sub('[^\w\s@+.-]', '', username).lower())
-    # Django allows for '@' in usernames in order to accomodate for
-    # project wanting to use e-mail for username. In allauth we don't
-    # use this, we already have a proper place for putting e-mail
-    # addresses (EmailAddress), so let's not use the full e-mail
-    # address and only take the part leading up to the '@'.
-    username = username.split('@')[0]
-    username = username.strip() or 'user'
-
+    username = _generate_unique_username_base(txts)
     User = get_user_model()
     try:
         max_length = User._meta.get_field(USER_MODEL_USERNAME_FIELD).max_length
@@ -48,7 +55,8 @@ def generate_unique_username(txt):
             else:
                 pfx = ''
             ret = username[0:max_length - len(pfx)] + pfx
-            User.objects.get(**{USER_MODEL_USERNAME_FIELD: ret})
+            query = {USER_MODEL_USERNAME_FIELD + '__iexact': ret}
+            User.objects.get(**query)
             i += 1
         except User.DoesNotExist:
             return ret

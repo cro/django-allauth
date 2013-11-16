@@ -78,6 +78,8 @@ Supported Flows
 Supported Providers
 -------------------
 
+- AngelList (OAuth2)
+
 - Bitly (OAuth2)
 
 - Dropbox (OAuth)
@@ -87,6 +89,8 @@ Supported Providers
 - Github
 
 - Google (OAuth2)
+
+- Instagram
 
 - LinkedIn
 
@@ -170,12 +174,13 @@ settings.py::
         'allauth',
         'allauth.account',
         'allauth.socialaccount',
-	# ... include the providers you want to enable:
+        # ... include the providers you want to enable:
         'allauth.socialaccount.providers.bitly',
         'allauth.socialaccount.providers.dropbox',
         'allauth.socialaccount.providers.facebook',
         'allauth.socialaccount.providers.github',
         'allauth.socialaccount.providers.google',
+        'allauth.socialaccount.providers.instagram',
         'allauth.socialaccount.providers.linkedin',
         'allauth.socialaccount.providers.openid',
         'allauth.socialaccount.providers.persona',
@@ -196,6 +201,21 @@ urls.py::
         (r'^accounts/', include('allauth.urls')),
         ...
     )
+
+
+Post-Installation
+-----------------
+
+In your django root execute the command below to create your database tables::
+
+    ./manage.py syncdb
+
+Now start your server, visit your admin pages (http://localhost:8000/admin )
+and follow these steps:
+
+  1. Add a Site object for your domain
+  2. For each provider you want, enter in Social App → Add Social App
+  3. Choose the site, social provider and the credentials you obtained from the provider.
 
 
 Configuration
@@ -238,6 +258,12 @@ ACCOUNT_EMAIL_VERIFICATION (="optional")
 ACCOUNT_EMAIL_SUBJECT_PREFIX (="[Site] ")
   Subject-line prefix to use for email messages sent. By default, the
   name of the current `Site` (`django.contrib.sites`) is used.
+
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = (="http")
+  The default protocol used for when generating URLs, e.g. for the
+  password forgotten procedure. Note that this is a default only --
+  the protocol is not enforced by any of the views. There are numerous
+  third party packages available for enforcing `https`, use those.
 
 ACCOUNT_LOGOUT_ON_GET (=False)
   Determines whether or not the user is automatically logged out by a
@@ -324,8 +350,18 @@ SOCIALACCOUNT_PROVIDERS (= dict)
 Upgrading
 ---------
 
+From 0.14.1
+***********
+
+- In case you were using the internal method
+  `generate_unique_username`, note that its signature has changed. It
+  now takes a list of candidates to base the username on.
+
 From 0.13.0
 ***********
+
+- The `socialaccount/account_inactive.html` template has been
+  moved to `account/account_inactive.html`.
 
 - The adapter API for creating and populating users has been
   overhauled. As a result, the `populate_new_user` adapter methods
@@ -541,6 +577,16 @@ For local development, use the following::
     http://127.0.0.1:8000/accounts/twitter/login/callback/
 
 
+AngelList
+---------
+
+Register your OAuth app here: https://angel.co/api/oauth/clients
+
+For local development, use the following callback URL::
+
+    http://localhost:8000/accounts/angellist/login/callback/
+
+
 Facebook
 --------
 
@@ -568,7 +614,7 @@ The following Facebook settings are available::
     SOCIALACCOUNT_PROVIDERS = \
         { 'facebook':
             { 'SCOPE': ['email', 'publish_stream'],
-	      'AUTH_PARAMS': { 'auth_type': 'reauthenticate' },
+              'AUTH_PARAMS': { 'auth_type': 'reauthenticate' },
               'METHOD': 'oauth2' ,
               'LOCALE_FUNC': 'path.to.callable'} }
 
@@ -595,20 +641,19 @@ LOCALE_FUNC:
             { 'facebook':
                 { 'LOCALE_FUNC': lambda request: 'zh_CN'} }
 
-App registration
+App registration (get your key and secret here)
     https://developers.facebook.com/apps
 
 Development callback URL
-    http://localhost:8000
+    Leave your App Domains empty and put in he section `Website with Facebook
+    Login` put this as your Site URL: `http://localhost:8000`
 
 
 Google
 ------
 
-The Google provider is OAuth2 based. Register your Google API client
-over at `https://code.google.com/apis/console/`. Make sure you list a
-redirect uri of the form
-`http://example.com/accounts/google/login/callback/`.
+The Google provider is OAuth2 based. More info:
+`http://code.google.com/apis/accounts/docs/OAuth2.html#Registering`.
 
 You can specify the scope to use as follows::
 
@@ -620,19 +665,31 @@ You can specify the scope to use as follows::
 By default, `profile` scope is required, and optionally `email` scope
 depending on whether or not `SOCIALACCOUNT_QUERY_EMAIL` is enabled.
 
+App registration (get your key and secret here)
+        https://code.google.com/apis/console/
+
+Development callback URL
+        Make sure you list a redirect uri of the form
+        `http://example.com/accounts/google/login/callback/`. You can fill
+        multiple URLs, one for each test domain.
+
 
 LinkedIn
 --------
 
-The LinkedIn provider is OAuth based. Register your LinkedIn app over
-at `https://www.linkedin.com/secure/developer?newapp=`. Leave the
-OAuth redirect URL empty.
+The LinkedIn provider is OAuth based.
 
-You can specify the scope to use as follows::
+You can specify the scope and fields to fetch as follows::
 
     SOCIALACCOUNT_PROVIDERS = \
-        { 'linkedin':
-            { 'SCOPE': ['r_emailaddress'] } }
+        {'linkedin':
+          {'SCOPE': ['r_emailaddress'],
+           'PROFILE_FIELDS: ['id',
+                             'first-name',
+                             'last-name',
+                             'email-address',
+                             'picture-url',
+                             'public-profile-url']}}
 
 By default, `r_emailaddress` scope is required depending on whether or
 not `SOCIALACCOUNT_QUERY_EMAIL` is enabled.
@@ -643,6 +700,10 @@ scope enabled. Please refer to
 `https://developer.linkedin.com/forum/when-will-old-apps-have-scope-parameter-enabled`
 for more background information.
 
+App registration (get your key and secret here)
+        https://www.linkedin.com/secure/developer?newapp=
+Development callback URL
+        Leave the OAuth redirect URL empty.
 
 OpenID
 ------
@@ -1043,6 +1104,56 @@ it is listed in `settings.INSTALLED_APPS`.  All messages (as in
 respective template. If you want to disable a message simply override
 the message template with a blank one.
 
+
+Frequently Asked Questions
+==========================
+
+Overall
+-------
+
+Why don't you implement support for ... ?
+*****************************************
+
+This app is just about authentication. Anything that is project
+specific, such as making choices on what to display in a profile page,
+or, what information is stored for a user (e.g. home address, or
+favorite color?), is beyond scope and therefore not offered.
+
+
+Troubleshooting
+---------------
+
+The /accounts/ URL is giving me a 404
+*************************************
+
+There is no such URL. Try `/accounts/login/` instead.
+
+When I attempt to login I run into a 404 on /accounts/profile/
+**************************************************************
+
+When you end up here you have successfully logged in. However, you
+will need to implement a view for this URL yourself, as whatever is to
+be displayed here is project specific. You can also decide to redirect
+elsewhere:
+
+https://docs.djangoproject.com/en/dev/ref/settings/#login-redirect-url
+
+When I sign up I run into connectivity errors (connection refused et al)
+************************************************************************
+
+You probably have not got an e-mail (SMTP) server running on the
+machine you are developing on. Therefore, `allauth` is unable to send
+verification mails.
+
+You can work around this by adding the following line to
+``settings.py``:
+
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+This will avoid the need for an SMTP server as e-mails will be printed
+to the console. For more information, please refer to:
+
+https://docs.djangoproject.com/en/dev/ref/settings/#email-host
 
 Showcase
 ========

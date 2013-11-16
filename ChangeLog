@@ -1,3 +1,29 @@
+2013-10-28  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Version 0.14.1 released (PyPi did not render the README.rst
+   	  properly).
+
+	* Version 0.14.0 released.
+
+2013-10-19  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Stuart Ross contributed AngelList support, thanks!
+
+2013-10-16  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* LinkedIn: profile fields that are to be fetched are now
+	configurable (`PROFILE_FIELDS` provider-level setting).
+
+2013-10-13  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Udi Oron contributed a Hebrew translation, thanks!
+
+2013-10-09  Raymond Penners  <raymond.penners@intenct.nl>
+
+	* Add setting `ACCOUNT_DEFAULT_HTTP_PROTOCOL` (HTTPS support).
+
+	* George Whewell contributed Instagram support, thanks!
+
 2013-09-09  Raymond Penners  <raymond.penners@intenct.nl>
 
 	* Refactored adapter methods relating to creating and populating
