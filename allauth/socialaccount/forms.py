@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from django import forms
+from django.utils.translation import ugettext_lazy as _
 
 from allauth.account.forms import BaseSignupForm
 from allauth.account.utils import (user_username, user_email,
@@ -23,8 +24,10 @@ class SignupForm(BaseSignupForm):
                    'username': user_username(user) or '',
                    'first_name': user_field(user, 'first_name') or '',
                    'last_name': user_field(user, 'last_name') or ''}
-        kwargs['initial'] = initial
-        kwargs['email_required'] = app_settings.EMAIL_REQUIRED
+        kwargs.update({
+            'initial': initial,
+            'email_required': kwargs.get('email_required',
+                                         app_settings.EMAIL_REQUIRED)})
         super(SignupForm, self).__init__(*args, **kwargs)
 
     def save(self, request):
@@ -33,6 +36,13 @@ class SignupForm(BaseSignupForm):
         # TODO: Add request?
         super(SignupForm, self).save(user)
         return user
+
+    def raise_duplicate_email_error(self):
+        raise forms.ValidationError(
+            _("An account already exists with this e-mail address."
+              " Please sign in to that account first, then connect"
+              " your %s account.")
+            % self.sociallogin.account.get_provider().name)
 
 
 class DisconnectForm(forms.Form):

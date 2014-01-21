@@ -1,6 +1,8 @@
 import warnings
+import json
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.template import TemplateDoesNotExist
 from django.contrib.sites.models import Site
@@ -50,9 +52,9 @@ class DefaultAccountAdapter(object):
             prefix = u"[{name}] ".format(name=site.name)
         return prefix + force_text(subject)
 
-    def send_mail(self, template_prefix, email, context):
+    def render_mail(self, template_prefix, email, context):
         """
-        Sends an e-mail to `email`.  `template_prefix` identifies the
+        Renders an e-mail to `email`.  `template_prefix` identifies the
         e-mail that is to be sent, e.g. "account/email/email_confirmation"
         """
         subject = render_to_string('{0}_subject.txt'.format(template_prefix),
@@ -84,6 +86,10 @@ class DefaultAccountAdapter(object):
                                settings.DEFAULT_FROM_EMAIL,
                                [email])
             msg.content_subtype = 'html'  # Main content is now text/html
+        return msg
+
+    def send_mail(self, template_prefix, email, context):
+        msg = self.render_mail(template_prefix, email, context)
         msg.send()
 
     def get_login_redirect_url(self, request):
@@ -234,6 +240,24 @@ class DefaultAccountAdapter(object):
                                          extra_tags=extra_tags)
             except TemplateDoesNotExist:
                 pass
+
+    def ajax_response(self, request, response, redirect_to=None, form=None):
+        data = {}
+        if redirect_to:
+            status = 200
+            data['location'] = redirect_to
+        if form:
+            if form.is_valid():
+                status = 200
+            else:
+                status = 400
+                data['form_errors'] = form._errors
+            if hasattr(response, 'render'):
+                response.render()
+            data['html'] = response.content.decode('utf8')
+        return HttpResponse(json.dumps(data),
+                            status=status,
+                            content_type='application/json')
 
 
 def get_adapter():

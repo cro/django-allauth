@@ -58,13 +58,13 @@ class LoginForm(forms.Form):
         super(LoginForm, self).__init__(*args, **kwargs)
         if app_settings.AUTHENTICATION_METHOD == AuthenticationMethod.EMAIL:
             login_widget = forms.TextInput(attrs={'placeholder':
-                                                  _('E-mail address')})
+                                                  _('E-mail address'), 'autofocus': 'autofocus'})
             login_field = forms.EmailField(label=_("E-mail"),
                                            widget=login_widget)
         elif app_settings.AUTHENTICATION_METHOD \
                 == AuthenticationMethod.USERNAME:
             login_widget = forms.TextInput(attrs={'placeholder':
-                                                  _('Username')})
+                                                  _('Username'), 'autofocus': 'autofocus'})
             login_field = forms.CharField(label=_("Username"),
                                           widget=login_widget,
                                           max_length=30)
@@ -72,7 +72,7 @@ class LoginForm(forms.Form):
             assert app_settings.AUTHENTICATION_METHOD \
                 == AuthenticationMethod.USERNAME_EMAIL
             login_widget = forms.TextInput(attrs={'placeholder':
-                                                  _('Username or e-mail')})
+                                                  _('Username or e-mail'), 'autofocus': 'autofocus'})
             login_field = forms.CharField(label=pgettext("field label",
                                                          "Login"),
                                           widget=login_widget)
@@ -97,6 +97,10 @@ class LoginForm(forms.Form):
             credentials["username"] = login
         credentials["password"] = self.cleaned_data["password"]
         return credentials
+
+    def clean_login(self):
+        login = self.cleaned_data['login']
+        return login.strip()
 
     def clean(self):
         if self._errors:
@@ -174,13 +178,16 @@ class BaseSignupForm(_base_signup_form_class()):
                                max_length=30,
                                min_length=app_settings.USERNAME_MIN_LENGTH,
                                widget=forms.TextInput(attrs={'placeholder':
-                                                             _('Username')}))
+                                                             _('Username'), 'autofocus': 'autofocus'}))
     email = forms.EmailField(widget=forms.TextInput(attrs=
                                                     {'placeholder':
                                                      _('E-mail address')}))
 
     def __init__(self, *args, **kwargs):
-        email_required = kwargs.pop('email_required')
+        email_required = kwargs.pop('email_required',
+                                    app_settings.EMAIL_REQUIRED)
+        self.username_required = kwargs.pop('username_required',
+                                            app_settings.USERNAME_REQUIRED)
         super(BaseSignupForm, self).__init__(*args, **kwargs)
         # field order may contain additional fields from our base class,
         # so take proper care when reordering...
@@ -192,7 +199,7 @@ class BaseSignupForm(_base_signup_form_class()):
         else:
             self.fields["email"].label = ugettext("E-mail (optional)")
             self.fields["email"].required = False
-            if app_settings.USERNAME_REQUIRED:
+            if self.username_required:
                 field_order = ['username', 'email']
 
         # Merge our email and username fields in if they are not
@@ -204,7 +211,7 @@ class BaseSignupForm(_base_signup_form_class()):
             if not field in merged_field_order:
                 merged_field_order.insert(0, field)
         set_form_field_order(self, merged_field_order)
-        if not app_settings.USERNAME_REQUIRED:
+        if not self.username_required:
             del self.fields["username"]
 
     def clean_username(self):
@@ -217,9 +224,12 @@ class BaseSignupForm(_base_signup_form_class()):
         value = get_adapter().clean_email(value)
         if app_settings.UNIQUE_EMAIL:
             if value and email_address_exists(value):
-                raise forms.ValidationError(_("A user is already registered"
-                                              " with this e-mail address."))
+                self.raise_duplicate_email_error()
         return value
+
+    def raise_duplicate_email_error(self):
+        raise forms.ValidationError(_("A user is already registered"
+                                      " with this e-mail address."))
 
 
 class SignupForm(BaseSignupForm):
@@ -231,7 +241,6 @@ class SignupForm(BaseSignupForm):
                                        widget=forms.HiddenInput())
 
     def __init__(self, *args, **kwargs):
-        kwargs['email_required'] = app_settings.EMAIL_REQUIRED
         super(SignupForm, self).__init__(*args, **kwargs)
         if not app_settings.SIGNUP_PASSWORD_VERIFICATION:
             del self.fields["password2"]

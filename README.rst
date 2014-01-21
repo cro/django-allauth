@@ -78,6 +78,8 @@ Supported Flows
 Supported Providers
 -------------------
 
+- Amazon (OAuth2)
+
 - AngelList (OAuth2)
 
 - Bitly (OAuth2)
@@ -86,15 +88,21 @@ Supported Providers
 
 - Facebook (both OAuth2 and JS SDK)
 
-- Github
+- Feedly (OAuth2)
+
+- Flickr (OAuth)
+
+- Github (OAuth2)
 
 - Google (OAuth2)
 
-- Instagram
+- Instagram (OAuth2)
 
-- LinkedIn
+- LinkedIn (OAuth, OAuth2)
 
 - OpenId
+
+- Paypal (OAuth2)
 
 - Persona
 
@@ -104,7 +112,7 @@ Supported Providers
 
 - Twitch (OAuth2)
 
-- Twitter
+- Twitter (OAuth)
 
 - Vimeo (OAuth)
 
@@ -152,8 +160,10 @@ settings.py::
 
     TEMPLATE_CONTEXT_PROCESSORS = (
         ...
+        # Required by allauth template tags
         "django.core.context_processors.request",
         ...
+        # allauth specific context processors
         "allauth.account.context_processors.account",
         "allauth.socialaccount.context_processors.socialaccount",
         ...
@@ -171,17 +181,25 @@ settings.py::
 
     INSTALLED_APPS = (
         ...
+        # The Django sites framework is required
+        'django.contrib.sites',
+
         'allauth',
         'allauth.account',
         'allauth.socialaccount',
         # ... include the providers you want to enable:
+        'allauth.socialaccount.providers.amazon',
+        'allauth.socialaccount.providers.angellist',
         'allauth.socialaccount.providers.bitly',
         'allauth.socialaccount.providers.dropbox',
         'allauth.socialaccount.providers.facebook',
+        'allauth.socialaccount.providers.flickr',
+        'allauth.socialaccount.providers.feedly',
         'allauth.socialaccount.providers.github',
         'allauth.socialaccount.providers.google',
         'allauth.socialaccount.providers.instagram',
         'allauth.socialaccount.providers.linkedin',
+        'allauth.socialaccount.providers.linkedin_oauth2',
         'allauth.socialaccount.providers.openid',
         'allauth.socialaccount.providers.persona',
         'allauth.socialaccount.providers.soundcloud',
@@ -206,16 +224,16 @@ urls.py::
 Post-Installation
 -----------------
 
-In your django root execute the command below to create your database tables::
+In your Django root execute the command below to create your database tables::
 
     ./manage.py syncdb
 
-Now start your server, visit your admin pages (http://localhost:8000/admin )
+Now start your server, visit your admin pages (e.g. http://localhost:8000/admin/)
 and follow these steps:
 
-  1. Add a Site object for your domain
-  2. For each provider you want, enter in Social App → Add Social App
-  3. Choose the site, social provider and the credentials you obtained from the provider.
+  1. Add a `Site` for your domain, matching `settings.SITE_ID` (`django.contrib.sites` app).
+  2. For each OAuth based provider, add a `Social App` (`socialaccount` app).
+  3. Fill in the site and the OAuth app credentials obtained from the provider.
 
 
 Configuration
@@ -230,6 +248,10 @@ ACCOUNT_ADAPTER (="allauth.account.adapter.DefaultAccountAdapter")
 ACCOUNT_AUTHENTICATION_METHOD (="username" | "email" | "username_email")
   Specifies the login method to use -- whether the user logs in by
   entering his username, e-mail address, or either one of both.
+
+ACCOUNT_CONFIRM_EMAIL_ON_GET (=False)
+  Determines whether or not an e-mail address is automatically confirmed
+  by a mere GET request.
 
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL (=settings.LOGIN_URL)
   The URL to redirect to after a successful e-mail confirmation, in case no
@@ -262,8 +284,7 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX (="[Site] ")
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = (="http")
   The default protocol used for when generating URLs, e.g. for the
   password forgotten procedure. Note that this is a default only --
-  the protocol is not enforced by any of the views. There are numerous
-  third party packages available for enforcing `https`, use those.
+  see the section on HTTPS for more information.
 
 ACCOUNT_LOGOUT_ON_GET (=False)
   Determines whether or not the user is automatically logged out by a
@@ -332,10 +353,6 @@ SOCIALACCOUNT_AUTO_SIGNUP (=True)
   arises due to a duplicate e-mail address the signup form will still
   kick in.
 
-SOCIALACCOUNT_AVATAR_SUPPORT (= 'avatar' in settings.INSTALLED_APPS)
-  Enable support for django-avatar. When enabled, the profile image of
-  the user is copied locally into django-avatar at signup.
-
 SOCIALACCOUNT_EMAIL_REQUIRED (=ACCOUNT_EMAIL_REQUIRED)
   The user is required to hand over an e-mail address when signing up
   using a social account.
@@ -349,6 +366,47 @@ SOCIALACCOUNT_PROVIDERS (= dict)
 
 Upgrading
 ---------
+
+From 0.15.0
+***********
+
+- The Amazon provider requires more space for `token_secret`, so the
+  maximum length restriction has been dropped. Migrations are in
+  place.
+
+
+From 0.14.2
+***********
+
+- The `/accounts/login/` view now supports AJAX requests.
+
+- Instead of directly rendering and returning a template, logging in
+  while the account is inactive or not yet confirmed now redirects to
+  two new views: `/accounts/inactive/` respectively
+  `/accounts/confirm-email/`.
+
+- The `account/verification_sent.html` template no longer receives the
+  e-mail address in the context (`email`). Note that a message
+  containing that e-mail address is still emitted using the messages
+  framework.
+
+- The `/accounts/confirm_email/key/` view has been
+  renamed to `/accounts/confirm-email/` (human friendlier). Redirects
+  are in place to handle old still pending confirmations.
+
+- Built-in support for django-avatar has been removed. Offering such
+  functionality means making choices which may not be valid for
+  everyone. For example, allauth was downloading the image (which can
+  take some time, or even block) in the context of the login, whereas
+  a better place might be some celery background job. Additionally, in
+  case of an error it simply ignored this. How about retries et al?
+  Also, do you want to copy the avatar once at sign up, or do you want
+  to update on each login? All in all, this functionality goes way
+  beyond authentication and should be addressed elsewhere, beyond
+  allauth scope. The original code has been preserved here so that you
+  can easily reinstate it in your own project:
+  https://gist.github.com/pennersr/7571752
+
 
 From 0.14.1
 ***********
@@ -576,6 +634,17 @@ For local development, use the following::
 
     http://127.0.0.1:8000/accounts/twitter/login/callback/
 
+Amazon
+------
+
+Amazon requires secure OAuth callback URLs (`redirect_uri`), please
+see the section on HTTPS about how this is handled.
+
+App registration (get your key and secret here)
+    http://login.amazon.com/manageApps
+
+Development callback URL
+    https://example.com/amazon/login/callback/
 
 AngelList
 ---------
@@ -612,11 +681,12 @@ or::
 The following Facebook settings are available::
 
     SOCIALACCOUNT_PROVIDERS = \
-        { 'facebook':
-            { 'SCOPE': ['email', 'publish_stream'],
-              'AUTH_PARAMS': { 'auth_type': 'reauthenticate' },
-              'METHOD': 'oauth2' ,
-              'LOCALE_FUNC': 'path.to.callable'} }
+        {'facebook':
+           {'SCOPE': ['email', 'publish_stream'],
+            'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
+            'METHOD': 'oauth2',
+            'LOCALE_FUNC': 'path.to.callable',
+            'VERIFIED_EMAIL': False}}
 
 METHOD
     Either `js_sdk` or `oauth2`
@@ -641,12 +711,29 @@ LOCALE_FUNC:
             { 'facebook':
                 { 'LOCALE_FUNC': lambda request: 'zh_CN'} }
 
+VERIFIED_EMAIL:
+    It is not clear from the Facebook documentation whether or not the
+    fact that the account is verified implies that the e-mail address
+    is verified as well. For example, verification could also be done
+    by phone or credit card. To be on the safe side, the default is to
+    treat e-mail addresses from Facebook as unverified. But, if you
+    feel that is too paranoid, then use this setting to mark them as
+    verified. Do know that by setting this to `True` you are
+    introducing a security risk.
+
 App registration (get your key and secret here)
     https://developers.facebook.com/apps
 
 Development callback URL
     Leave your App Domains empty and put in he section `Website with Facebook
     Login` put this as your Site URL: `http://localhost:8000`
+
+
+GitHub
+-----
+
+App registration
+    https://github.com/settings/applications/new
 
 
 Google
@@ -677,7 +764,9 @@ Development callback URL
 LinkedIn
 --------
 
-The LinkedIn provider is OAuth based.
+The LinkedIn provider comes in two flavors: OAuth 1.0
+(`allauth.socialaccount.providers.linkedin`) and OAuth 2.0
+(`allauth.socialaccount.providers.linkedin_oauth2`).
 
 You can specify the scope and fields to fetch as follows::
 
@@ -699,6 +788,12 @@ has no effect you may be using an old LinkedIn app that is not
 scope enabled. Please refer to
 `https://developer.linkedin.com/forum/when-will-old-apps-have-scope-parameter-enabled`
 for more background information.
+
+Furthermore, we have experienced trouble upgrading from OAuth 1.0 to
+OAuth 2.0 using the same app. Attempting to do so resulted in a weird
+error message when fetching the access token::
+
+    missing required parameters, includes an invalid parameter value, parameter more then once. : Unable to retrieve access token : authorization code not found
 
 App registration (get your key and secret here)
         https://www.linkedin.com/secure/developer?newapp=
@@ -734,6 +829,32 @@ following template tag::
 
     {% load socialaccount %}
     <a href="{% provider_login_url "openid" openid="https://www.google.com/accounts/o8/id" next="/success/url/" %}">Google</a>
+
+Paypal
+------
+
+The following Paypal settings are available::
+
+    SOCIALACCOUNT_PROVIDERS = \
+        {'paypal':
+           {'SCOPE': ['openid', 'email'],
+            'MODE': 'live'}}
+
+
+SCOPE
+
+In the Paypal developer site, you must also check the required attributes for your application.
+For a full list of scope options, see https://developer.paypal.com/docs/integration/direct/identity/attributes/
+
+MODE
+
+Either `live` or `test`. Set to test to use the Paypal sandbox.
+
+App registration (get your key and secret here)
+    https://developer.paypal.com/webapps/developer/applications/myapps
+
+Development callback URL
+    http://example.com/paypal/login/callback
 
 
 Persona
@@ -927,8 +1048,14 @@ Furthermore, you can pass along an `action` parameter with value
 for authentication even if he already signed in before. For now, this
 is supported by Facebook, Google and Twitter only.
 
+For Javascript based logins (e.g. when you enable the Facebook JS
+SDK), you will need to make sure that the required Javascript is
+loaded. The following tag loads all scripts for the enabled
+providers::
 
-For easy access to the social accounts for a user::
+    {% providers_media_js %}
+
+For easy access to the social accounts for a user use::
 
     {% get_social_accounts user as accounts %}
 
@@ -968,6 +1095,27 @@ The behavior is as follows:
 
 Advanced Usage
 ==============
+
+
+HTTPS
+-----
+
+This app currently provides no functionality for enforcing views to be
+HTTPS only, or switching from HTTP to HTTPS (and back) on demand.
+There are third party packages aimed at providing precisely this,
+please use these .
+
+What is provided is the following:
+
+- The protocol to be used for generating links (e.g. password
+  forgotten) for e-mails is configurable by means of the
+  `ACCOUNT_DEFAULT_HTTP_PROTOCOL` setting.
+
+- Automatically switching to HTTPS is built-in for OAuth providers
+  that require this (e.g. Amazon). However, remembering the original
+  protocol before the switch and switching back after the login is not
+  provided.
+
 
 Custom User Models
 ------------------
@@ -1118,6 +1266,15 @@ This app is just about authentication. Anything that is project
 specific, such as making choices on what to display in a profile page,
 or, what information is stored for a user (e.g. home address, or
 favorite color?), is beyond scope and therefore not offered.
+
+This information is nice and all, but... I need more!
+*****************************************************
+
+Here are a few third party resources to help you get started:
+
+- https://speakerdeck.com/tedtieken/signing-up-and-signing-in-users-in-django-with-django-allauth
+- http://stackoverflow.com/questions/tagged/django-allauth
+- http://www.sarahhagstrom.com/2013/09/the-missing-django-allauth-tutorial/
 
 
 Troubleshooting
