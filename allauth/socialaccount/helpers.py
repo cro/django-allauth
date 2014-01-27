@@ -5,13 +5,10 @@ from django.http import HttpResponseRedirect
 from django.template import RequestContext
 from django.forms import ValidationError
 from django.core.urlresolvers import reverse
-from django.template.defaultfilters import slugify
 
-from allauth.utils import (generate_unique_username, email_address_exists,
-                           get_user_model)
+from allauth.utils import get_user_model
 from allauth.account.utils import (perform_login, complete_signup,
-                                   user_field,
-                                   user_email, user_username)
+                                   user_username)
 from allauth.account import app_settings as account_settings
 from allauth.account.adapter import get_adapter as get_account_adapter
 from allauth.exceptions import ImmediateHttpResponse
@@ -25,29 +22,8 @@ User = get_user_model()
 
 
 def _process_signup(request, sociallogin):
-    # If email is specified, check for duplicate and if so, no auto signup.
-    auto_signup = app_settings.AUTO_SIGNUP
-    email = user_email(sociallogin.account.user)
-    if auto_signup:
-        # Let's check if auto_signup is really possible...
-        if email:
-            if account_settings.UNIQUE_EMAIL:
-                if email_address_exists(email):
-                    # Oops, another user already has this address.  We
-                    # cannot simply connect this social account to the
-                    # existing user. Reason is that the email adress may
-                    # not be verified, meaning, the user may be a hacker
-                    # that has added your email address to his account in
-                    # the hope that you fall in his trap.  We cannot check
-                    # on 'email_address.verified' either, because
-                    # 'email_address' is not guaranteed to be verified.
-                    auto_signup = False
-                    # FIXME: We redirect to signup form -- user will
-                    # see email address conflict only after posting
-                    # whereas we detected it here already.
-        elif app_settings.EMAIL_REQUIRED:
-            # Nope, email is required and we don't have it yet...
-            auto_signup = False
+    auto_signup = get_adapter().is_auto_signup_allowed(request,
+                                                       sociallogin)
     if not auto_signup:
         request.session['socialaccount_sociallogin'] = sociallogin.serialize()
         url = reverse('socialaccount_signup')
@@ -155,58 +131,7 @@ def _complete_social_login(request, sociallogin):
     return ret
 
 
-def _name_from_url(url):
-    """
-    >>> _name_from_url('http://google.com/dir/file.ext')
-    u'file.ext'
-    >>> _name_from_url('http://google.com/dir/')
-    u'dir'
-    >>> _name_from_url('http://google.com/dir')
-    u'dir'
-    >>> _name_from_url('http://google.com/dir/..')
-    u'dir'
-    >>> _name_from_url('http://google.com/dir/../')
-    u'dir'
-    >>> _name_from_url('http://google.com')
-    u'google.com'
-    >>> _name_from_url('http://google.com/dir/subdir/file..ext')
-    u'file.ext'
-    """
-    try:
-        from urllib.parse import urlparse
-    except ImportError:
-        from urlparse import urlparse
-
-    p = urlparse(url)
-    for base in (p.path.split('/')[-1],
-                 p.path,
-                 p.netloc):
-        name = ".".join(filter(lambda s: s,
-                               map(slugify, base.split("."))))
-        if name:
-            return name
-
-
-def _copy_avatar(request, user, account):
-    import urllib2
-    from django.core.files.base import ContentFile
-    from avatar.models import Avatar
-    url = account.get_avatar_url()
-    if url:
-        ava = Avatar(user=user)
-        ava.primary = Avatar.objects.filter(user=user).count() == 0
-        try:
-            content = urllib2.urlopen(url).read()
-            name = _name_from_url(url)
-            ava.avatar.save(name, ContentFile(content))
-        except IOError:
-            # Let's nog make a big deal out of this...
-            pass
-
-
 def complete_social_signup(request, sociallogin):
-    if app_settings.AVATAR_SUPPORT:
-        _copy_avatar(request, sociallogin.account.user, sociallogin.account)
     return complete_signup(request,
                            sociallogin.account.user,
                            app_settings.EMAIL_VERIFICATION,

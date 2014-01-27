@@ -34,7 +34,10 @@ class AppSettings(object):
 
     def _setting(self, name, dflt):
         from django.conf import settings
-        return getattr(settings, self.prefix + name, dflt)
+        getter = getattr(settings,
+                         'ALLAUTH_SETTING_GETTER',
+                         lambda name, dflt: getattr(settings, name, dflt))
+        return getter(self.prefix + name, dflt)
 
     @property
     def DEFAULT_HTTP_PROTOCOL(self):
@@ -174,6 +177,10 @@ class AppSettings(object):
     def ADAPTER(self):
         return self._setting('ADAPTER',
                              'allauth.account.adapter.DefaultAccountAdapter')
+
+    @property
+    def CONFIRM_EMAIL_ON_GET(self):
+        return self._setting('CONFIRM_EMAIL_ON_GET', False)
 
     @property
     def LOGOUT_REDIRECT_URL(self):
