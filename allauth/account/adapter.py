@@ -223,7 +223,9 @@ class DefaultAccountAdapter(object):
         Validates an email value. You can hook into this if you want to
         (dynamically) restrict what email addresses can be chosen.
         """
+        print "I have been called."
         return email
+
 
     def add_message(self, request, level, message_template,
                     message_context={}, extra_tags=''):
